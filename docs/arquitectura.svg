@@ -1,0 +1,98 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1320" height="700" viewBox="0 0 1320 700" role="img" aria-labelledby="title description">
+  <title id="title">Arquitectura de Report Generator</title>
+  <desc id="description">El navegador envía un reporte a la API, que lo encola en Redis. El worker Python usa DeepSeek y Gotenberg, guarda el PDF en Silo y notifica el resultado por Redis y SSE. El navegador abre el PDF desde Silo mediante una URL firmada.</desc>
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L10,5 L0,10 z" fill="#475569"/>
+    </marker>
+    <marker id="arrow-blue" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L10,5 L0,10 z" fill="#2563eb"/>
+    </marker>
+    <style>
+      text { font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; fill: #172033; }
+      .title { font-size: 29px; font-weight: 750; }
+      .subtitle { font-size: 14px; fill: #596579; }
+      .box-title { font-size: 18px; font-weight: 700; }
+      .box-detail { font-size: 13px; fill: #46536a; }
+      .label { font-size: 12px; font-weight: 650; fill: #344054; paint-order: stroke; stroke: #fff; stroke-width: 5px; stroke-linejoin: round; }
+      .node { stroke-width: 2; rx: 15; }
+      .flow { fill: none; stroke: #475569; stroke-width: 2.5; marker-end: url(#arrow); }
+      .response { fill: none; stroke: #2563eb; stroke-width: 2.5; marker-end: url(#arrow-blue); }
+      .async { stroke-dasharray: 8 7; }
+    </style>
+  </defs>
+  <rect width="1320" height="700" rx="20" fill="#f5f7fb"/>
+  <text class="title" x="48" y="52">Report Generator</text>
+  <text class="subtitle" x="48" y="78">Flujo de generación, almacenamiento y entrega del reporte PDF</text>
+
+  <!-- Flow connectors are behind the service cards. -->
+  <path class="flow" d="M240 278 H290"/>
+  <text class="label" x="248" y="260">solicitud</text>
+  <path class="response" d="M290 322 H240"/>
+  <text class="label" x="246" y="347">SSE: estado + URL</text>
+
+  <path class="flow" d="M500 278 H550"/>
+  <text class="label" x="507" y="260">encola job</text>
+  <path class="flow" d="M760 278 H810"/>
+  <text class="label" x="765" y="260">consume</text>
+
+  <path class="flow" d="M655 325 V410 H395 V325"/>
+  <text class="label" x="478" y="402">resultado: BLPOP</text>
+  <path class="response" d="M865 325 V462 H655 V325"/>
+  <text class="label" x="690" y="454">RPUSH resultado</text>
+
+  <path class="flow" d="M910 235 C950 188 990 157 1040 145"/>
+  <text class="label" x="918" y="180">prompt</text>
+  <path class="response" d="M1040 172 C990 196 950 220 910 263"/>
+  <text class="label" x="924" y="218">reporte</text>
+
+  <path class="flow" d="M910 295 H1040"/>
+  <text class="label" x="923" y="284">HTML</text>
+  <path class="response" d="M1040 320 H910"/>
+  <text class="label" x="930" y="344">PDF</text>
+
+  <path class="flow" d="M910 342 C950 396 990 451 1040 490"/>
+  <text class="label" x="920" y="418">guarda PDF</text>
+  <path class="response async" d="M240 350 V615 H1090 V565"/>
+  <text class="label" x="430" y="603">GET PDF usando URL firmada</text>
+
+  <!-- Services -->
+  <rect class="node" x="30" y="235" width="210" height="115" fill="#eaf2ff" stroke="#6c8ebf"/>
+  <text class="box-title" x="50" y="274">Navegador</text>
+  <text class="box-detail" x="50" y="299">Formulario del cliente</text>
+  <text class="box-detail" x="50" y="320">Visor y descarga PDF</text>
+
+  <rect class="node" x="290" y="235" width="210" height="115" fill="#e9f5e8" stroke="#82b366"/>
+  <text class="box-title" x="310" y="274">API</text>
+  <text class="box-detail" x="310" y="299">Express / TypeScript</text>
+  <text class="box-detail" x="310" y="320">REST + Server-Sent Events</text>
+
+  <rect class="node" x="550" y="235" width="210" height="115" fill="#f2eaf5" stroke="#9673a6"/>
+  <text class="box-title" x="570" y="274">Redis</text>
+  <text class="box-detail" x="570" y="299">Cola BullMQ</text>
+  <text class="box-detail" x="570" y="320">Lista report-results</text>
+
+  <rect class="node" x="810" y="235" width="190" height="115" fill="#e9f5e8" stroke="#82b366"/>
+  <text class="box-title" x="830" y="274">Worker Python</text>
+  <text class="box-detail" x="830" y="299">pydantic-ai</text>
+  <text class="box-detail" x="830" y="320">Coordina el trabajo</text>
+
+  <rect class="node" x="1040" y="95" width="250" height="100" fill="#fff1df" stroke="#d79b00"/>
+  <text class="box-title" x="1062" y="134">DeepSeek</text>
+  <text class="box-detail" x="1062" y="160">Generación del reporte estructurado</text>
+
+  <rect class="node" x="1040" y="245" width="250" height="100" fill="#fff1df" stroke="#d79b00"/>
+  <text class="box-title" x="1062" y="284">Gotenberg</text>
+  <text class="box-detail" x="1062" y="310">Convierte HTML a PDF</text>
+
+  <rect class="node" x="1040" y="465" width="250" height="100" fill="#f2eaf5" stroke="#9673a6"/>
+  <text class="box-title" x="1062" y="504">Silo · almacenamiento S3</text>
+  <text class="box-detail" x="1062" y="530">Almacena y sirve el PDF firmado</text>
+
+  <rect x="30" y="655" width="16" height="4" rx="2" fill="#475569"/>
+  <text class="box-detail" x="54" y="662">solicitudes / trabajos</text>
+  <rect x="220" y="655" width="16" height="4" rx="2" fill="#2563eb"/>
+  <text class="box-detail" x="244" y="662">respuestas / resultados</text>
+  <line x1="430" y1="657" x2="462" y2="657" stroke="#2563eb" stroke-width="2.5" stroke-dasharray="7 5"/>
+  <text class="box-detail" x="472" y="662">acceso directo mediante URL firmada</text>
+</svg>

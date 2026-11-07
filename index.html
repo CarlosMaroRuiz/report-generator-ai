@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#f5f7fb">
+    <title>Generador de reportes</title>
+    <style>
+      :root {
+        color-scheme: light;
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        color: #172033;
+        background: #f5f7fb;
+      }
+
+      * { box-sizing: border-box; }
+      body { margin: 0; min-width: 320px; }
+      main { width: min(1080px, calc(100% - 32px)); margin: 48px auto; }
+      h1 { margin: 0; font-size: clamp(1.7rem, 3vw, 2.25rem); }
+      .intro { margin: 8px 0 28px; color: #5c667a; }
+
+      .card {
+        padding: 24px;
+        background: #fff;
+        border: 1px solid #e1e6ef;
+        border-radius: 16px;
+        box-shadow: 0 10px 30px rgb(23 32 51 / 5%);
+      }
+
+      label { display: block; margin-bottom: 8px; font-weight: 650; }
+
+      textarea {
+        display: block;
+        width: 100%;
+        min-height: 132px;
+        padding: 14px;
+        resize: vertical;
+        border: 1px solid #cbd3e0;
+        border-radius: 10px;
+        font: inherit;
+        line-height: 1.5;
+      }
+
+      textarea:focus-visible, button:focus-visible, a:focus-visible {
+        outline: 3px solid #a9c5ff;
+        outline-offset: 2px;
+      }
+
+      .hint { margin: 8px 0 16px; color: #667085; font-size: .9rem; }
+
+      button, .download {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 44px;
+        padding: 0 18px;
+        border: 0;
+        border-radius: 9px;
+        background: #2457d6;
+        color: #fff;
+        font: inherit;
+        font-weight: 650;
+        text-decoration: none;
+        cursor: pointer;
+      }
+
+      button:disabled { opacity: .6; cursor: wait; }
+      .status { min-height: 24px; margin: 16px 0 0; color: #46536a; }
+      .status[data-state="error"] { color: #b42318; }
+      .status[data-state="success"] { color: #16794a; }
+      .viewer-card { margin-top: 24px; }
+      .viewer-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+      .viewer-heading h2 { margin: 0; font-size: 1.2rem; }
+      .download { min-height: 38px; padding: 0 14px; background: #172033; font-size: .92rem; }
+
+      iframe {
+        display: block;
+        width: 100%;
+        height: min(76vh, 900px);
+        min-height: 480px;
+        margin-top: 18px;
+        border: 1px solid #d6dce7;
+        border-radius: 10px;
+        background: #e9edf4;
+      }
+
+      [hidden] { display: none !important; }
+
+      @media (max-width: 600px) {
+        main { margin: 24px auto; }
+        .card { padding: 18px; }
+        .viewer-heading { align-items: flex-start; flex-direction: column; }
+        iframe { min-height: 60vh; }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Generador de reportes</h1>
+      <p class="intro">Escribe un tema y sigue el estado hasta que el PDF esté listo.</p>
+
+      <section class="card" aria-labelledby="form-title">
+        <h2 id="form-title" hidden>Nuevo reporte</h2>
+        <form id="report-form">
+          <label for="topic">Tema del reporte</label>
+          <textarea id="topic" name="msg" minlength="3" maxlength="2000" required
+            placeholder="Ej.: tendencias recientes de la energía solar en México"></textarea>
+          <p class="hint">Entre 3 y 2000 caracteres. La generación puede tardar unos minutos.</p>
+          <button id="submit-button" type="submit">Generar reporte</button>
+        </form>
+        <p id="status" class="status" role="status" aria-live="polite"></p>
+      </section>
+
+      <section id="viewer-card" class="card viewer-card" aria-labelledby="viewer-title" hidden>
+        <div class="viewer-heading">
+          <h2 id="viewer-title">Reporte listo</h2>
+          <a id="download-link" class="download" target="_blank" rel="noopener">Abrir / descargar PDF</a>
+        </div>
+        <iframe id="pdf-viewer" title="Visor del reporte PDF"></iframe>
+      </section>
+    </main>
+
+    <script>
+      const form = document.querySelector('#report-form');
+      const topic = document.querySelector('#topic');
+      const button = document.querySelector('#submit-button');
+      const status = document.querySelector('#status');
+      const viewer = document.querySelector('#viewer-card');
+      const viewerTitle = document.querySelector('#viewer-title');
+      const pdfViewer = document.querySelector('#pdf-viewer');
+      const downloadLink = document.querySelector('#download-link');
+
+      function setStatus(message, state = '') {
+        status.textContent = message;
+        status.dataset.state = state;
+      }
+
+      function finishWithError(message, eventSource) {
+        eventSource?.close();
+        button.disabled = false;
+        setStatus(message, 'error');
+      }
+
+      form.addEventListener('submit', (event) => {
+        event.preventDefault();
+        if (!form.reportValidity()) return;
+
+        if (!window.crypto?.randomUUID || !window.EventSource) {
+          setStatus('Este navegador no permite iniciar la conexión segura necesaria.', 'error');
+          return;
+        }
+
+        const taskId = window.crypto.randomUUID();
+        const message = topic.value.trim();
+        let enqueueStarted = false;
+        let finished = false;
+
+        button.disabled = true;
+        viewer.hidden = true;
+        pdfViewer.removeAttribute('src');
+        downloadLink.removeAttribute('href');
+        setStatus('Conectando para recibir el resultado...');
+
+        const eventSource = new EventSource(
+          `/api/reports/subscribe/${encodeURIComponent(taskId)}`
+        );
+
+        eventSource.onmessage = async (eventMessage) => {
+          let result;
+          try {
+            result = JSON.parse(eventMessage.data);
+          } catch {
+            finishWithError('El servidor envió una respuesta que no se pudo leer.', eventSource);
+            return;
+          }
+
+          if (result.status === 'subscribed') {
+            if (enqueueStarted) return;
+            enqueueStarted = true;
+            setStatus('Solicitud enviada. Generando el reporte...');
+
+            try {
+              const response = await fetch('/api/reports/generate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ taskId, msg: message }),
+              });
+              const body = await response.json();
+              if (!response.ok) {
+                throw new Error(body.msg || `Error HTTP ${response.status}`);
+              }
+              if (!finished) setStatus(`Reporte en proceso. ID: ${body.taskId}`);
+            } catch (error) {
+              finished = true;
+              finishWithError(`No se pudo iniciar el reporte: ${error.message}`, eventSource);
+            }
+            return;
+          }
+
+          if (result.status === 'failed') {
+            finished = true;
+            finishWithError(`No se pudo generar el PDF: ${result.error || 'error desconocido'}`, eventSource);
+            return;
+          }
+
+          if (result.status === 'completed') {
+            let pdfUrl;
+            try {
+              pdfUrl = new URL(result.s3Url, window.location.href);
+              if (!['http:', 'https:'].includes(pdfUrl.protocol)) throw new Error('protocolo no válido');
+            } catch {
+              finished = true;
+              finishWithError('El servidor devolvió un enlace de PDF no válido.', eventSource);
+              return;
+            }
+
+            finished = true;
+            eventSource.close();
+            button.disabled = false;
+            viewerTitle.textContent = result.title || 'Reporte listo';
+            pdfViewer.src = pdfUrl.href;
+            downloadLink.href = pdfUrl.href;
+            viewer.hidden = false;
+            setStatus('El reporte se generó correctamente.', 'success');
+            viewer.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }
+        };
+
+        eventSource.onerror = () => {
+          if (eventSource.readyState === EventSource.CLOSED && !finished) {
+            finished = true;
+            finishWithError('Se cerró la conexión antes de recibir el resultado.', eventSource);
+          } else if (!finished) {
+            setStatus('Reconectando con el servidor para recibir el resultado...');
+          }
+        };
+      });
+    </script>
+  </body>
+</html>

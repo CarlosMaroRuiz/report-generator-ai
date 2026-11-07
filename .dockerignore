@@ -1,0 +1,11 @@
+# Ignorar dependencias de Node locales de cualquier app
+**/node_modules/
+**/npm-debug.log
+
+# Ignorar entornos virtuales de Python si creas alguno local
+**/__pycache__/
+**/.venv/
+
+# Ignorar archivos del sistema y Git
+.git
+.gitignore
